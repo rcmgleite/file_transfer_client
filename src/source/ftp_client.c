@@ -44,18 +44,26 @@ int main(int argc, char *argv[]){
 	 * 	Abro o arquivo que vou escever
 	 **/
 	int fd_to_write = open("/home/rafael/Desktop/rafael/C/proj_redes_client/Debug/teste_new.txt",O_RDWR | O_CREAT, S_IRUSR|S_IWUSR);
+	int num_threads, file_size;
 
-	char teste[1];
+	/**
+	 * 	Nos headers eu tenho o número de threads e o tamanho do arquivo que vai ser recebido
+	 **/
+	parse_header(con_sock, &num_threads, &file_size);
 
-	int bytesRcvd = recv(con_sock, teste, 1, 0);
+	/**
+	 *	Daqui pra frente lê o que o servidor manda e monta o arquivo final
+	 **/
+	char c[1];
+	int bytesRcvd = recv(con_sock, c, 1, 0);
 	while(bytesRcvd){
 		if(bytesRcvd == -1){
 			fprintf(stderr, "Deu merda!\n");
 			exit(1);
 		}
-		fprintf(stderr, "%c", teste[0]);
-		write(fd_to_write, teste, sizeof(teste));
-		bytesRcvd = recv(con_sock, teste, 1, 0);
+		fprintf(stderr, "%c", c[0]);
+		write(fd_to_write, c, sizeof(c));
+		bytesRcvd = recv(con_sock, c, 1, 0);
 	}
 	close(con_sock);
 

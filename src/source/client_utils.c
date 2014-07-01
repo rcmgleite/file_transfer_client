@@ -69,3 +69,20 @@ void parse_header(int con_sock, int *num_threads, int *file_size){
 	bytesRcvd = recv(con_sock, c, 1, 0);
 	bytesRcvd = recv(con_sock, c, 1, 0);
 }
+
+/**
+ *	Vai ler as 2 primeiras linhas respectivas à sua thread para pegar o offset do arquivo e o tamanho do segmento
+ **/
+void server_thread_params(int offset, int segment_size){
+	int bytesRcvd = recv(con_sock, c, 1, 0);
+		while(bytesRcvd && c[0] != '\n'){
+			if(bytesRcvd == -1){
+				fprintf(stderr, "Deu merda!\n");
+				exit(1);
+			}
+			c_num_threads[i] = c[0];
+			i++;
+			bytesRcvd = recv(con_sock, c, 1, 0);
+		}
+		*num_threads = atoi(c_num_threads);
+}

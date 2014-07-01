@@ -43,7 +43,7 @@ int main(int argc, char *argv[]){
 	/**
 	 * 	Abro o arquivo que vou escever
 	 **/
-	int fd_to_write = open("/home/rafael/Desktop/rafael/C/proj_redes_client/Debug/teste_new.txt",O_RDWR | O_CREAT, 777);
+	int fd_to_write = open("/home/rafael/Desktop/rafael/C/proj_redes_client/Debug/teste_new.txt",O_RDWR | O_CREAT, S_IRUSR|S_IWUSR);
 
 	char teste[1];
 

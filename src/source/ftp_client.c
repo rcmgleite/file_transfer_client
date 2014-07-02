@@ -11,7 +11,6 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <fcntl.h>
-#include <fcntl.h>
 #include <pthread.h>
 
 #include "ftp_client.h"
@@ -38,7 +37,7 @@ int main(int argc, char *argv[]){
 	fprintf(stdout, "Vai criar a coneção!\n");
 	int con_sock = create_connection(argv[1], argv[2]);
 	fprintf(stdout, "Criou a conexão!\n");
-	char to_say[] = "teste.txt";
+	char to_say[] = "BelieveS01e10.mp4";
 	char rec[1024];
 
 	if(recv(con_sock, rec, 1024, 0) != -1){
@@ -59,13 +58,13 @@ int main(int argc, char *argv[]){
 	/**
 	 * 	Nos headers eu tenho o número de threads e o tamanho do arquivo que vai ser recebido
 	 **/
+//	char bb[1024];
+//	recv(con_sock, bb, 1024, 0);
 	parse_header(con_sock, &num_threads, &file_size);
 
 	/**
 	 *	Daqui pra frente lê o que o servidor manda e monta o arquivo final
-	 **/
-
-	/**
+	 *
 	 *	Alocação de memória para threads e para a estrutura de argumentos
 	 **/
 	pthread_t *threads;
@@ -78,7 +77,7 @@ int main(int argc, char *argv[]){
 	 **/
 	int i;
 	for(i = 0; i < num_threads; i++){
-		initialize_thread(&threads[i], &args[i], i, con_sock, fd_to_write, &file_size, &curr_offset, fd_to_write);
+		initialize_thread(&threads[i], &args[i], i, con_sock, fd_to_write);
 	}
 
 	//Apenas para o programa esperar as threads executarem
@@ -89,19 +88,6 @@ int main(int argc, char *argv[]){
 	// Limpo todos os dados para a próxima requesição
 	clean_up(fd_to_write, threads, args, &num_threads, &curr_offset, &file_size);
 
-
-
-	char c[1];
-	int bytesRcvd = recv(con_sock, c, 1, 0);
-	while(bytesRcvd){
-		if(bytesRcvd == -1){
-			fprintf(stderr, "Deu merda!\n");
-			exit(1);
-		}
-		fprintf(stderr, "%c", c[0]);
-		write(fd_to_write, c, sizeof(c));
-		bytesRcvd = recv(con_sock, c, 1, 0);
-	}
 	close(con_sock);
 
 	return 0;
@@ -109,42 +95,43 @@ int main(int argc, char *argv[]){
 
 void *thread_function(void *args){
 	pthread_mutex_lock(&_lock);
-	char *file_segment;
-	file_segment = malloc(((_thread_args*)args)->chunk_size * sizeof(*file_segment));
-	int bytes_read;
-	fprintf(stdout, "\n\nSERÃO LIDOS: %d\n", ((_thread_args*)args)->chunk_size);
-	fprintf(stdout, "\nTHREAD NUMBER: %d\n", ((_thread_args*)args)->thread_number);
-	lseek(((_thread_args*)args)->fd_to_write, ((_thread_args*)args)->file_offset, SEEK_SET);
 
-	bytes_read = read(((_thread_args*)args)->server_sock, file_segment, ((_thread_args*)args)->chunk_size);
+	/**
+	 *	Lê o offset e o segment_size que o servidor enviar para remontar o arquivo
+	 **/
+	int offset, segment_size;
+	server_thread_params(((_thread_args*)args)->server_sock, &offset, &segment_size);
+
+	char *file_segment;
+	file_segment = malloc(segment_size * sizeof(*file_segment));
+	int bytes_read;
+	fprintf(stdout, "\n\nSERÃO LIDOS: %d\n", segment_size);
+	fprintf(stdout, "\nTHREAD NUMBER: %d\n", ((_thread_args*)args)->thread_number);
+
+	/**
+	 *	Leitura do socket que vai conter o contéudo do arquivo
+	 **/
+	bytes_read = read(((_thread_args*)args)->server_sock, file_segment, segment_size);
 	if(bytes_read < 0)
 		fprintf(stderr, "\nErro ao tentar ler arquivo pedido\n\n");
-	fprintf(stdout, "%s\n\n", file_segment);
-	lseek(((_thread_args*)args)->fd_to_write, ((_thread_args*)args)->file_offset, SEEK_SET);
-	write(((_thread_args*)args)->fd_to_write, file_segment, ((_thread_args*)args)->chunk_size);
+	/**
+	 *	lseek vai mudar o ponteiro do arquivo para escrever no local correto
+	 **/
+	lseek(((_thread_args*)args)->fd_to_write, offset, SEEK_SET);
+	write(((_thread_args*)args)->fd_to_write, file_segment, segment_size);
+
+	/**
+	 *	Libero a memória do file_segment
+	 **/
 	free(file_segment);
 	pthread_mutex_unlock(&_lock);
 	return NULL;
 }
 
-void initialize_thread(pthread_t *thread, struct thread_args *args, int thread_number, int server_sock, int fd_to_write, int *file_size, int *curr_offset){
+void initialize_thread(pthread_t *thread, struct thread_args *args, int thread_number, int server_sock, int fd_to_write){
 	args->thread_number = thread_number;
 	args->fd_to_write = fd_to_write;
-	//parte da incialização que muda para cada thread
-	if(*file_size - FIRST_GUESS_OFFSET > 0){
-		//ainda está no ponto onde as threads escrevem exatamente o tamanho do chunk
-		args->file_offset = *curr_offset;
-		args->chunk_size = FIRST_GUESS_OFFSET;
-		*file_size -= args->chunk_size;
-		*curr_offset +=args->chunk_size;
-	}
-	else{
-		//aqui já teremos um valor menor de chunk (última parte do arquivo)
-		args->file_offset = *curr_offset;
-		args->chunk_size = *file_size;
-		*file_size -= args->chunk_size;
-		*curr_offset +=args->chunk_size;
-	}
+	args->server_sock = server_sock;
 	pthread_create(thread, NULL, thread_function, (void*)args);
 }
 

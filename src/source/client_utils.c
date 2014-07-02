@@ -67,22 +67,29 @@ void parse_header(int con_sock, int *num_threads, int *file_size){
 
 	//Só retiro o 2 \ns para escrever corretamente no arquivo
 	bytesRcvd = recv(con_sock, c, 1, 0);
-	bytesRcvd = recv(con_sock, c, 1, 0);
 }
 
 /**
+ *	Lê uma linha completa de um arquivo
+ **/
+void read_line(int fd, char conent[]){
+	char c[1];
+	int i = 0;
+	int bytes_read = read(fd, c, 1);
+	while(bytes_read > 0 && c[0] != '\n'){
+		conent[i] = c[0];
+		bytes_read = read(fd, c, 1);
+		i++;
+	}
+	conent[i] = '\n';
+}
+/**
  *	Vai ler as 2 primeiras linhas respectivas à sua thread para pegar o offset do arquivo e o tamanho do segmento
  **/
-void server_thread_params(int offset, int segment_size){
-	int bytesRcvd = recv(con_sock, c, 1, 0);
-		while(bytesRcvd && c[0] != '\n'){
-			if(bytesRcvd == -1){
-				fprintf(stderr, "Deu merda!\n");
-				exit(1);
-			}
-			c_num_threads[i] = c[0];
-			i++;
-			bytesRcvd = recv(con_sock, c, 1, 0);
-		}
-		*num_threads = atoi(c_num_threads);
+void server_thread_params(int con_sock, int *offset, int *segment_size){
+	char c_offset[30], c_segment_size[30];
+	read_line(con_sock, c_offset);
+	read_line(con_sock, c_segment_size);
+	*offset = atoi(c_offset);
+	*segment_size = atoi(c_segment_size);
 }

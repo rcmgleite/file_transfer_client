@@ -20,9 +20,9 @@ pthread_mutex_t _lock = PTHREAD_MUTEX_INITIALIZER;
 
 int main(int argc, char *argv[]){
 	//TODO remover
-	argc = 3;
-	argv[1] = "127.0.0.1";
-	argv[2] = "30000";
+//	argc = 3;
+//	argv[1] = "127.0.0.1";
+//	argv[2] = "30000";
 
 	if(argc != 3){
 		fprintf(stderr, "Passa os argumentos direito, porra\n");
@@ -37,8 +37,10 @@ int main(int argc, char *argv[]){
 	fprintf(stdout, "Vai criar a coneção!\n");
 	int con_sock = create_connection(argv[1], argv[2]);
 	fprintf(stdout, "Criou a conexão!\n");
-	char to_say[] = "BelieveS01e10.mp4";
+	char to_say[255];
 	char rec[1024];
+
+	scanf("%s", to_say);
 
 	if(recv(con_sock, rec, 1024, 0) != -1){
 		fprintf(stderr, "recebeu: %s\n", rec);
@@ -52,7 +54,14 @@ int main(int argc, char *argv[]){
 	/**
 	 * 	Abro o arquivo que vou escever
 	 **/
-	int fd_to_write = open("/home/rafael/Desktop/rafael/C/proj_redes_client/Debug/teste_new.txt",O_RDWR | O_CREAT, S_IRUSR|S_IWUSR);
+	char *path_to_write = build_file_path(to_say);
+	fprintf(stderr, "caminho do arquivo transferido: %s\n", path_to_write);
+	int fd_to_write = open(path_to_write ,O_RDWR | O_CREAT, S_IRUSR|S_IWUSR);
+	if(fd_to_write == 1){
+		fprintf(stderr, "Deu merda pra abrir o arquivo do cliente\n");
+		close(con_sock);
+		exit(1);
+	}
 	int num_threads, file_size;
 
 	/**
@@ -60,7 +69,9 @@ int main(int argc, char *argv[]){
 	 **/
 //	char bb[1024];
 //	recv(con_sock, bb, 1024, 0);
+	fprintf(stderr, "Antes de fazer o parse do Header\n");
 	parse_header(con_sock, &num_threads, &file_size);
+	fprintf(stderr, "Depois de fazer o parse do Header\n");
 
 	/**
 	 *	Daqui pra frente lê o que o servidor manda e monta o arquivo final
@@ -69,15 +80,17 @@ int main(int argc, char *argv[]){
 	 **/
 	pthread_t *threads;
 	threads = (pthread_t *)malloc(num_threads * sizeof(*threads));
-	struct thread_args *args;
-	args = (struct thread_args *)malloc(num_threads * sizeof(*args));
+//	struct thread_args *args;
+//	args = (struct thread_args *)malloc(num_threads * sizeof(*args));
 
 	/**
 	 *	Inicialização das threads
 	 **/
 	int i;
 	for(i = 0; i < num_threads; i++){
-		initialize_thread(&threads[i], &args[i], i, con_sock, fd_to_write);
+		struct thread_args *args;
+		args = (struct thread_args *)malloc(sizeof(*args));
+		initialize_thread(&threads[i], args, i, con_sock, fd_to_write);
 	}
 
 	//Apenas para o programa esperar as threads executarem
@@ -86,7 +99,7 @@ int main(int argc, char *argv[]){
 	}
 
 	// Limpo todos os dados para a próxima requesição
-	clean_up(fd_to_write, threads, args, &num_threads, &curr_offset, &file_size);
+	clean_up(fd_to_write, threads, &num_threads, &curr_offset, &file_size);
 
 	close(con_sock);
 
@@ -103,7 +116,7 @@ void *thread_function(void *args){
 	server_thread_params(((_thread_args*)args)->server_sock, &offset, &segment_size);
 
 	char *file_segment;
-	file_segment = malloc(segment_size * sizeof(*file_segment));
+	file_segment = (char*) malloc(segment_size * sizeof(*file_segment));
 	int bytes_read;
 	fprintf(stdout, "\n\nSERÃO LIDOS: %d\n", segment_size);
 	fprintf(stdout, "\nTHREAD NUMBER: %d\n", ((_thread_args*)args)->thread_number);
@@ -124,6 +137,7 @@ void *thread_function(void *args){
 	 *	Libero a memória do file_segment
 	 **/
 	free(file_segment);
+	free(args);
 	pthread_mutex_unlock(&_lock);
 	return NULL;
 }
@@ -135,11 +149,10 @@ void initialize_thread(pthread_t *thread, struct thread_args *args, int thread_n
 	pthread_create(thread, NULL, thread_function, (void*)args);
 }
 
-void clean_up(int fd_to_write, pthread_t *threads, struct thread_args *args, int *number_of_threads,
+void clean_up(int fd_to_write, pthread_t *threads, int *number_of_threads,
 		int *file_size, int *curr_offset){
     close(fd_to_write);
     free(threads);
-    free(args);
 	*number_of_threads = 0;
 	*file_size = 0;
 	*curr_offset = 0;

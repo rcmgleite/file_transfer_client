@@ -13,14 +13,37 @@
 
 #include "client_utils.h"
 
+char *build_file_path(char* file_name){
+	size_t i, slen = strlen(file_name);
+	for (i = 0; i < slen; i++) {
+		if(file_name[i] == '\r')
+			file_name[i] = '\0';
+	}
+
+	char *file_path;
+	file_path = malloc(strlen(ROOT_PATH) + strlen(file_name));
+	strcpy(file_path, ROOT_PATH);
+	strcat(file_path, file_name);
+	return file_path;
+}
+
 int create_connection(char *host, char *port){
 	fprintf(stdout, "host: %s\n", host);
 	fprintf(stdout, "port: %s\n", port);
 	int sock = socket(PF_INET, SOCK_STREAM, 0);
+	/**
+	 *	sockaddr_in é uma variação de sockaddr para ser usada na internet(in)
+	 *	A função 'connect()' espera um sockaddr, portanto devemos fazer o cast de
+	 *	sockaddr_in para sockaddr na hora da chamada
+	 **/
 	struct sockaddr_in si;
 	memset(&si, 0, sizeof(si));
 	si.sin_family = PF_INET;
-	si.sin_addr.s_addr = inet_addr(host);
+	/**
+	 *	A função inet_addr já está obsoleta e não funciona com ipv6...
+	 **/
+	//	si.sin_addr.s_addr = inet_addr(host);
+	inet_pton(AF_INET, host, &(si.sin_addr));
 	si.sin_port = htons(atoi(port));
 	fprintf(stdout, "Antes do 'connect'\n");
 	int c = connect(sock, (struct sockaddr*)&si, sizeof(si));
@@ -36,7 +59,7 @@ int create_connection(char *host, char *port){
 
 void parse_header(int con_sock, int *num_threads, int *file_size){
 	int i = 0;
-	char c_num_threads[20], c_file_size[20];
+	char c_num_threads[255], c_file_size[255];
 	char c[1];
 	//primeiro recebo o número de threads
 	int bytesRcvd = recv(con_sock, c, 1, 0);
@@ -72,7 +95,7 @@ void parse_header(int con_sock, int *num_threads, int *file_size){
 /**
  *	Lê uma linha completa de um arquivo
  **/
-void read_line(int fd, char conent[]){
+void read_line(int fd, char conent[255]){
 	char c[1];
 	int i = 0;
 	int bytes_read = read(fd, c, 1);
@@ -87,7 +110,7 @@ void read_line(int fd, char conent[]){
  *	Vai ler as 2 primeiras linhas respectivas à sua thread para pegar o offset do arquivo e o tamanho do segmento
  **/
 void server_thread_params(int con_sock, int *offset, int *segment_size){
-	char c_offset[30], c_segment_size[30];
+	char c_offset[255], c_segment_size[255];
 	read_line(con_sock, c_offset);
 	read_line(con_sock, c_segment_size);
 	*offset = atoi(c_offset);

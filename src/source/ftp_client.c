@@ -12,66 +12,69 @@
 #include <arpa/inet.h>
 #include <fcntl.h>
 #include <pthread.h>
+#include <sys/resource.h>
 
 #include "ftp_client.h"
 #include "client_utils.h"
 
 pthread_mutex_t _lock = PTHREAD_MUTEX_INITIALIZER;
-
+/**
+ *	O programa é inicializado com 2 parâmetros: ip e porta (igual ao telnet)
+ **/
 int main(int argc, char *argv[]){
-	//TODO remover
-//	argc = 3;
-//	argv[1] = "127.0.0.1";
-//	argv[2] = "30000";
-
 	if(argc != 3){
-		fprintf(stderr, "Passa os argumentos direito, porra\n");
+		fprintf(stderr, "Passe os parametros 'ip' e 'porta' para que o cliente possa se conectar ao cliente.\n");
 		exit(1);
 	}
+
+	struct rlimit rlp;
+	getrlimit(RLIMIT_NOFILE, &rlp);
+	rlp.rlim_cur = 4000;
+	setrlimit(RLIMIT_NOFILE, &rlp);
 
 	/**
 	 *	Variáveis necessárias
 	 **/
 	int curr_offset = 0;
 
-	fprintf(stdout, "Vai criar a coneção!\n");
 	int con_sock = create_connection(argv[1], argv[2]);
-	fprintf(stdout, "Criou a conexão!\n");
 	char to_say[255];
 	char rec[1024];
 
+	fprintf(stderr, "Digite o nome do arquivo desejado: ");
 	scanf("%s", to_say);
 
 	if(recv(con_sock, rec, 1024, 0) != -1){
-		fprintf(stderr, "recebeu: %s\n", rec);
+		fprintf(stderr, "received: %s\n", rec);
 		send(con_sock, to_say, sizeof(to_say), 0);
 	}
 	else{
-		fprintf(stderr, "Cagou tudo aqui na hora de ler o primeiro trecho do protocolo...\n");
+		fprintf(stderr, "Error during client initialization\n Shutting down!...\n");
+		exit(1);
 	}
-	fprintf(stderr, "enviou o nome do arquivo: %s\n", to_say);
+	fprintf(stderr, "sent file_name: %s\n", to_say);
 
 	/**
 	 * 	Abro o arquivo que vou escever
 	 **/
 	char *path_to_write = build_file_path(to_say);
-	fprintf(stderr, "caminho do arquivo transferido: %s\n", path_to_write);
+	fprintf(stderr, "path to received file: %s\n", path_to_write);
 	int fd_to_write = open(path_to_write ,O_RDWR | O_CREAT, S_IRUSR|S_IWUSR);
 	if(fd_to_write == 1){
-		fprintf(stderr, "Deu merda pra abrir o arquivo do cliente\n");
+		fprintf(stderr, "Error while trying to create the new file\n Shutting down");
 		close(con_sock);
 		exit(1);
 	}
+	free(path_to_write);
+
 	int num_threads, file_size;
 
 	/**
 	 * 	Nos headers eu tenho o número de threads e o tamanho do arquivo que vai ser recebido
 	 **/
-//	char bb[1024];
-//	recv(con_sock, bb, 1024, 0);
-	fprintf(stderr, "Antes de fazer o parse do Header\n");
 	parse_header(con_sock, &num_threads, &file_size);
-	fprintf(stderr, "Depois de fazer o parse do Header\n");
+
+	fprintf(stderr, "num_threads: %d\n", num_threads);
 
 	/**
 	 *	Daqui pra frente lê o que o servidor manda e monta o arquivo final
@@ -110,10 +113,19 @@ void *thread_function(void *args){
 	pthread_mutex_lock(&_lock);
 
 	/**
+	 * 	Criação das conexões TCP entre threads.. função espelho da do server
+	 **/
+	/*TODO - IP NÃO HARD-CODED e 30000 não hard-coded*/
+	char new_port[100];
+	sprintf(new_port, "%d", 30000 + 1 + ((_thread_args*)args)->thread_number);
+	int trans_sock = create_connection("127.0.0.1", new_port);
+
+	/**
 	 *	Lê o offset e o segment_size que o servidor enviar para remontar o arquivo
 	 **/
 	int offset, segment_size;
-	server_thread_params(((_thread_args*)args)->server_sock, &offset, &segment_size);
+
+	server_thread_params(trans_sock, &offset, &segment_size);
 
 	char *file_segment;
 	file_segment = (char*) malloc(segment_size * sizeof(*file_segment));
@@ -121,12 +133,10 @@ void *thread_function(void *args){
 	fprintf(stdout, "\n\nSERÃO LIDOS: %d\n", segment_size);
 	fprintf(stdout, "\nTHREAD NUMBER: %d\n", ((_thread_args*)args)->thread_number);
 
-	/**
-	 *	Leitura do socket que vai conter o contéudo do arquivo
-	 **/
-	bytes_read = read(((_thread_args*)args)->server_sock, file_segment, segment_size);
-	if(bytes_read < 0)
-		fprintf(stderr, "\nErro ao tentar ler arquivo pedido\n\n");
+	bytes_read = recv(trans_sock, file_segment, segment_size, 0);
+		if(bytes_read < 0)
+			fprintf(stderr, "\nErro ao tentar ler arquivo pedido\n\n");
+
 	/**
 	 *	lseek vai mudar o ponteiro do arquivo para escrever no local correto
 	 **/
@@ -138,7 +148,12 @@ void *thread_function(void *args){
 	 **/
 	free(file_segment);
 	free(args);
+
 	pthread_mutex_unlock(&_lock);
+
+	/*Fecha a conexão TCP*/
+	close(trans_sock);
+
 	return NULL;
 }
 

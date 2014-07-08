@@ -9,6 +9,7 @@
 #define CLIENT_UTILS_H_
 
 #define ROOT_PATH "/home/rafael/Desktop/rafael/C/proj_redes_client/Debug/"
+#define MAX_ITER 1000000
 
 char *build_file_path(char* file_name);
 int create_connection(char *host, char *port);

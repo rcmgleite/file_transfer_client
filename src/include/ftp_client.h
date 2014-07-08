@@ -11,6 +11,9 @@
 
 #define FIRST_GUESS_OFFSET 32768
 
+#define TRUE 1
+#define FALSE 0
+
 typedef struct thread_args{
 	int server_sock;
 	int thread_number;

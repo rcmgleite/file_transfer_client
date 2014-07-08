@@ -2,3 +2,5 @@ teste_new.txt
 *.o
 *.d
 *.mp4
+*.txt
+*.tar.gz

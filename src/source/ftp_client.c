@@ -133,15 +133,19 @@ void *thread_function(void *args){
 	fprintf(stdout, "\n\nSERÃO LIDOS: %d\n", segment_size);
 	fprintf(stdout, "\nTHREAD NUMBER: %d\n", ((_thread_args*)args)->thread_number);
 
-	bytes_read = recv(trans_sock, file_segment, segment_size, 0);
-		if(bytes_read < 0)
-			fprintf(stderr, "\nErro ao tentar ler arquivo pedido\n\n");
-
 	/**
 	 *	lseek vai mudar o ponteiro do arquivo para escrever no local correto
 	 **/
 	lseek(((_thread_args*)args)->fd_to_write, offset, SEEK_SET);
-	write(((_thread_args*)args)->fd_to_write, file_segment, segment_size);
+
+	while(segment_size != 0){
+		bytes_read = recv(trans_sock, file_segment, 2048, 0);
+		if(bytes_read < 0)
+			fprintf(stderr, "\nErro ao tentar ler arquivo pedido\n\n");
+
+		write(((_thread_args*)args)->fd_to_write, file_segment, bytes_read);
+		segment_size -= bytes_read;
+	}
 
 	/**
 	 *	Libero a memória do file_segment

@@ -9,7 +9,7 @@
 #define FTP_CLIENT_H_
 #include <pthread.h>		//lib das threads
 
-#define FIRST_GUESS_OFFSET 32768
+#define SERVER_PORT	30000
 
 #define TRUE 1
 #define FALSE 0

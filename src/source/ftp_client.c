@@ -117,7 +117,7 @@ void *thread_function(void *args){
 	 **/
 	/*TODO - IP NÃO HARD-CODED e 30000 não hard-coded*/
 	char new_port[100];
-	sprintf(new_port, "%d", 30000 + 1 + ((_thread_args*)args)->thread_number);
+	sprintf(new_port, "%d", SERVER_PORT + 1 + ((_thread_args*)args)->thread_number);
 	int trans_sock = create_connection("127.0.0.1", new_port);
 
 	/**

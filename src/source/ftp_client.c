@@ -27,6 +27,12 @@ int main(int argc, char *argv[]){
 		exit(1);
 	}
 
+	/*
+	 *	encontra o diretório de execução do programa
+	 **/
+	char exec_path[255];
+	readlink("/proc/self/exe", exec_path, 255);
+
 	struct rlimit rlp;
 	getrlimit(RLIMIT_NOFILE, &rlp);
 	rlp.rlim_cur = 4000;
@@ -57,7 +63,7 @@ int main(int argc, char *argv[]){
 	/**
 	 * 	Abro o arquivo que vou escever
 	 **/
-	char *path_to_write = build_file_path(to_say);
+	char *path_to_write = build_file_path(to_say, exec_path);
 	fprintf(stderr, "path to received file: %s\n", path_to_write);
 	int fd_to_write = open(path_to_write ,O_RDWR | O_CREAT, S_IRUSR|S_IWUSR);
 	if(fd_to_write == 1){

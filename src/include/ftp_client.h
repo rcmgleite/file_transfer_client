@@ -17,11 +17,11 @@
 typedef struct thread_args{
 	int server_sock;
 	int thread_number;
-	int fd_to_write;
+	char *file_path;
 }_thread_args;
 
 void *thread_function(void *args);
-void initialize_thread(pthread_t *thread, struct thread_args *args, int thread_number, int server_sock, int fd_to_write);
+void initialize_thread(pthread_t *thread, struct thread_args *args, int thread_number, int server_sock, char *file_path);
 void clean_up(int fd_to_write, pthread_t *threads, int *number_of_threads,
-		int *file_size, int *curr_offset);
+		int *file_size, int *curr_offset, char *file_path);
 #endif /* FTP_CLIENT_H_ */

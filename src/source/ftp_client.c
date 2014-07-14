@@ -13,6 +13,7 @@
 #include <fcntl.h>
 #include <pthread.h>
 #include <sys/resource.h>
+#include <time.h>
 
 #include "ftp_client.h"
 #include "client_utils.h"
@@ -71,7 +72,6 @@ int main(int argc, char *argv[]){
 		close(con_sock);
 		exit(1);
 	}
-	free(path_to_write);
 
 	int num_threads, file_size;
 
@@ -89,8 +89,14 @@ int main(int argc, char *argv[]){
 	 **/
 	pthread_t *threads;
 	threads = (pthread_t *)malloc(num_threads * sizeof(*threads));
-//	struct thread_args *args;
-//	args = (struct thread_args *)malloc(num_threads * sizeof(*args));
+
+	/*
+	 *	Contagem de tempo da transferência
+	 **/
+	clock_t begin, end;
+	double time_spent;
+
+	begin = clock();
 
 	/**
 	 *	Inicialização das threads
@@ -99,7 +105,7 @@ int main(int argc, char *argv[]){
 	for(i = 0; i < num_threads; i++){
 		struct thread_args *args;
 		args = (struct thread_args *)malloc(sizeof(*args));
-		initialize_thread(&threads[i], args, i, con_sock, fd_to_write);
+		initialize_thread(&threads[i], args, i, con_sock, path_to_write);
 	}
 
 	//Apenas para o programa esperar as threads executarem
@@ -107,8 +113,14 @@ int main(int argc, char *argv[]){
 		pthread_join(threads[i], NULL);
 	}
 
+
+    end = clock();
+    time_spent = (double)(end - begin) / CLOCKS_PER_SEC;
+
+    fprintf(stderr, "Aqruivo recebido!\nTime elapsed: %f s\n", time_spent);
+
 	// Limpo todos os dados para a próxima requesição
-	clean_up(fd_to_write, threads, &num_threads, &curr_offset, &file_size);
+	clean_up(fd_to_write, threads, &num_threads, &curr_offset, &file_size, path_to_write);
 
 	close(con_sock);
 
@@ -116,8 +128,6 @@ int main(int argc, char *argv[]){
 }
 
 void *thread_function(void *args){
-	pthread_mutex_lock(&_lock);
-
 	/**
 	 * 	Criação das conexões TCP entre threads.. função espelho da do server
 	 **/
@@ -136,20 +146,20 @@ void *thread_function(void *args){
 	char *file_segment;
 	file_segment = (char*) malloc(segment_size * sizeof(*file_segment));
 	int bytes_read;
-	fprintf(stdout, "\n\nSERÃO LIDOS: %d\n", segment_size);
-	fprintf(stdout, "\nTHREAD NUMBER: %d\n", ((_thread_args*)args)->thread_number);
+
+	int fd_write = open(((_thread_args*)args)->file_path ,O_RDWR | O_CREAT, S_IRUSR|S_IWUSR);
 
 	/**
 	 *	lseek vai mudar o ponteiro do arquivo para escrever no local correto
 	 **/
-	lseek(((_thread_args*)args)->fd_to_write, offset, SEEK_SET);
+	lseek(fd_write, offset, SEEK_SET);
 
 	while(segment_size != 0){
-		bytes_read = recv(trans_sock, file_segment, 2048, 0);
+		bytes_read = recv(trans_sock, file_segment, segment_size, 0);
 		if(bytes_read < 0)
 			fprintf(stderr, "\nErro ao tentar ler arquivo pedido\n\n");
 
-		write(((_thread_args*)args)->fd_to_write, file_segment, bytes_read);
+		write(fd_write, file_segment, bytes_read);
 		segment_size -= bytes_read;
 	}
 
@@ -159,25 +169,24 @@ void *thread_function(void *args){
 	free(file_segment);
 	free(args);
 
-	pthread_mutex_unlock(&_lock);
-
 	/*Fecha a conexão TCP*/
 	close(trans_sock);
 
 	return NULL;
 }
 
-void initialize_thread(pthread_t *thread, struct thread_args *args, int thread_number, int server_sock, int fd_to_write){
+void initialize_thread(pthread_t *thread, struct thread_args *args, int thread_number, int server_sock, char *file_path){
 	args->thread_number = thread_number;
-	args->fd_to_write = fd_to_write;
 	args->server_sock = server_sock;
+	args->file_path = file_path;
 	pthread_create(thread, NULL, thread_function, (void*)args);
 }
 
 void clean_up(int fd_to_write, pthread_t *threads, int *number_of_threads,
-		int *file_size, int *curr_offset){
+		int *file_size, int *curr_offset, char *file_path){
     close(fd_to_write);
     free(threads);
+    free(file_path);
 	*number_of_threads = 0;
 	*file_size = 0;
 	*curr_offset = 0;

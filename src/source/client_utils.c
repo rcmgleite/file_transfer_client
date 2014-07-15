@@ -64,7 +64,7 @@ int create_connection(char *host, char *port){
 	return sock;
 }
 
-void parse_header(int con_sock, int *num_threads, int *file_size){
+void parse_header(int con_sock, int *num_threads, long *file_size){
 	int i = 0;
 	char c_num_threads[255], c_file_size[255];
 	char c[1];
@@ -93,7 +93,7 @@ void parse_header(int con_sock, int *num_threads, int *file_size){
 		i++;
 		bytesRcvd = recv(con_sock, c, 1, 0);
 	}
-	*file_size = atoi(c_file_size);
+	*file_size = atol(c_file_size);
 	//Só retiro o 2 \ns para escrever corretamente no arquivo
 	//	bytesRcvd = recv(con_sock, c, 1, 0);
 }
@@ -115,10 +115,10 @@ void read_line(int fd, char conent[255]){
 /**
  *	Vai ler as 2 primeiras linhas respectivas à sua thread para pegar o offset do arquivo e o tamanho do segmento
  **/
-void server_thread_params(int con_sock, int *offset, int *segment_size){
+void server_thread_params(int con_sock, long *offset, long *segment_size){
 	char c_offset[255], c_segment_size[255];
 	read_line(con_sock, c_offset);
 	read_line(con_sock, c_segment_size);
-	*offset = atoi(c_offset);
-	*segment_size = atoi(c_segment_size);
+	*offset = atol(c_offset);
+	*segment_size = atol(c_segment_size);
 }

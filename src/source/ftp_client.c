@@ -42,7 +42,7 @@ int main(int argc, char *argv[]){
 	/**
 	 *	Variáveis necessárias
 	 **/
-	int curr_offset = 0;
+	long curr_offset = 0;
 
 	int con_sock = create_connection(argv[1], argv[2]);
 	char to_say[255];
@@ -73,7 +73,9 @@ int main(int argc, char *argv[]){
 		exit(1);
 	}
 
-	int num_threads, file_size;
+	close(fd_to_write);
+	int num_threads;
+	long file_size;
 
 	/**
 	 * 	Nos headers eu tenho o número de threads e o tamanho do arquivo que vai ser recebido
@@ -93,10 +95,7 @@ int main(int argc, char *argv[]){
 	/*
 	 *	Contagem de tempo da transferência
 	 **/
-	clock_t begin, end;
-	double time_spent;
-
-	begin = clock();
+	clock_t tic = clock();
 
 	/**
 	 *	Inicialização das threads
@@ -114,13 +113,13 @@ int main(int argc, char *argv[]){
 	}
 
 
-    end = clock();
-    time_spent = (double)(end - begin) / CLOCKS_PER_SEC;
+	clock_t toc = clock();
 
-    fprintf(stderr, "Aqruivo recebido!\nTime elapsed: %f s\n", time_spent);
+	fprintf(stderr, "Aqruivo recebido!\n");
+	fprintf(stderr, "Time elapsed: %f seconds\n", (double)(toc - tic) / CLOCKS_PER_SEC);
 
 	// Limpo todos os dados para a próxima requesição
-	clean_up(fd_to_write, threads, &num_threads, &curr_offset, &file_size, path_to_write);
+	clean_up(threads, &num_threads, &curr_offset, &file_size, path_to_write);
 
 	close(con_sock);
 
@@ -139,15 +138,15 @@ void *thread_function(void *args){
 	/**
 	 *	Lê o offset e o segment_size que o servidor enviar para remontar o arquivo
 	 **/
-	int offset, segment_size;
+	long offset, segment_size;
 
 	server_thread_params(trans_sock, &offset, &segment_size);
 
 	char *file_segment;
 	file_segment = (char*) malloc(segment_size * sizeof(*file_segment));
-	int bytes_read;
+	long bytes_read;
 
-	int fd_write = open(((_thread_args*)args)->file_path ,O_RDWR | O_CREAT, S_IRUSR|S_IWUSR);
+	int fd_write = open(((_thread_args*)args)->file_path ,O_RDWR);
 
 	/**
 	 *	lseek vai mudar o ponteiro do arquivo para escrever no local correto
@@ -168,7 +167,7 @@ void *thread_function(void *args){
 	 **/
 	free(file_segment);
 	free(args);
-
+	close(fd_write);
 	/*Fecha a conexão TCP*/
 	close(trans_sock);
 
@@ -182,9 +181,8 @@ void initialize_thread(pthread_t *thread, struct thread_args *args, int thread_n
 	pthread_create(thread, NULL, thread_function, (void*)args);
 }
 
-void clean_up(int fd_to_write, pthread_t *threads, int *number_of_threads,
-		int *file_size, int *curr_offset, char *file_path){
-    close(fd_to_write);
+void clean_up(pthread_t *threads, int *number_of_threads,
+		long *file_size, long *curr_offset, char *file_path){
     free(threads);
     free(file_path);
 	*number_of_threads = 0;

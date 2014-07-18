@@ -13,7 +13,7 @@
 #include <fcntl.h>
 #include <pthread.h>
 #include <sys/resource.h>
-#include <time.h>
+#include <sys/time.h>
 
 #include "ftp_client.h"
 #include "client_utils.h"
@@ -92,10 +92,11 @@ int main(int argc, char *argv[]){
 	pthread_t *threads;
 	threads = (pthread_t *)malloc(num_threads * sizeof(*threads));
 
-	/*
-	 *	Contagem de tempo da transferência
-	 **/
-	clock_t tic = clock();
+	wait_init(con_sock);
+
+	struct timeval tvalBefore, tvalAfter;  // removed comma
+
+	gettimeofday (&tvalBefore, NULL);
 
 	/**
 	 *	Inicialização das threads
@@ -111,12 +112,14 @@ int main(int argc, char *argv[]){
 	for (i = 0; i < num_threads; i++){
 		pthread_join(threads[i], NULL);
 	}
-
-
-	clock_t toc = clock();
+	gettimeofday (&tvalAfter, NULL);
 
 	fprintf(stderr, "Aqruivo recebido!\n");
-	fprintf(stderr, "Time elapsed: %f seconds\n", (double)(toc - tic) / CLOCKS_PER_SEC);
+
+	printf("Time Elapsed: %f sec\n",
+				                ((tvalAfter.tv_sec - tvalBefore.tv_sec)
+				               + (tvalAfter.tv_usec - tvalBefore.tv_usec)/(float)1000000)
+				              );
 
 	// Limpo todos os dados para a próxima requesição
 	clean_up(threads, &num_threads, &curr_offset, &file_size, path_to_write);
@@ -143,7 +146,9 @@ void *thread_function(void *args){
 	server_thread_params(trans_sock, &offset, &segment_size);
 
 	char *file_segment;
-	file_segment = (char*) malloc(segment_size * sizeof(*file_segment));
+	long write_size = (segment_size <= MAX_WRITE_SIZE ? segment_size: MAX_WRITE_SIZE);
+
+	file_segment = (char*) malloc(write_size * sizeof(*file_segment));
 	long bytes_read;
 
 	int fd_write = open(((_thread_args*)args)->file_path ,O_RDWR);
@@ -154,12 +159,15 @@ void *thread_function(void *args){
 	lseek(fd_write, offset, SEEK_SET);
 
 	while(segment_size != 0){
-		bytes_read = recv(trans_sock, file_segment, segment_size, 0);
+		bytes_read = recv(trans_sock, file_segment, write_size, 0);
 		if(bytes_read < 0)
 			fprintf(stderr, "\nErro ao tentar ler arquivo pedido\n\n");
 
 		write(fd_write, file_segment, bytes_read);
 		segment_size -= bytes_read;
+		if(write_size >= segment_size){
+			write_size = segment_size;
+		}
 	}
 
 	/**

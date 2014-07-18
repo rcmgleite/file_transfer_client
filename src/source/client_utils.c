@@ -122,3 +122,8 @@ void server_thread_params(int con_sock, long *offset, long *segment_size){
 	*offset = atol(c_offset);
 	*segment_size = atol(c_segment_size);
 }
+
+void wait_init(int con_sock){
+	char init[5];
+	recv(con_sock, init, 5, 0);
+}

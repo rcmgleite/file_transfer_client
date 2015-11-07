@@ -54,9 +54,6 @@ int main(int argc, char *argv[]){
 	}
 	fprintf(stderr, "sent file_name: %s\n", to_say);
 
-	/**
-	 * 	Abro o arquivo que vou escever
-	 **/
 	char *path_to_write = format_file_path(to_say);
 	fprintf(stderr, "path to received file: %s\n", path_to_write);
 	int fd_to_write = open(path_to_write ,O_RDWR | O_CREAT, S_IRUSR|S_IWUSR);
@@ -71,17 +68,11 @@ int main(int argc, char *argv[]){
 	long file_size;
 
 	/**
-	 * 	Nos headers eu tenho o número de threads e o tamanho do arquivo que vai ser recebido
+	 * 	Headers: n_threads e file size
 	 **/
 	parse_header(con_sock, &num_threads, &file_size);
 
 	fprintf(stderr, "server num_threads: %d\n", num_threads);
-
-	/**
-	 *	Daqui pra frente lê o que o servidor manda e monta o arquivo final
-	 *
-	 *	Alocação de memória para threads e para a estrutura de argumentos
-	 **/
 
 	thread_pool_t* pool = new_thread_pool(num_threads);
 	wait_init(con_sock);

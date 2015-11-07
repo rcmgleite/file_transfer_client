@@ -88,6 +88,8 @@ int main(int argc, char *argv[]){
 		pool_add_job(pool, thread_function, args);
 	}
 
+	pool_wait_finish(pool);
+
 	gettimeofday (&tvalAfter, NULL);
 
 	fprintf(stderr, "Aqruivo recebido!\n");

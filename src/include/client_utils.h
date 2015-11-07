@@ -11,7 +11,7 @@
 #define MAX_ITER 1000000
 #define PROGRAM_NAME "proj_redes_client"
 
-char *build_file_path(char* file_name, char *dir_path);
+char* format_file_path(char* file_name);
 int create_connection(char *host, char *port);
 void parse_header(int con_sock, int *num_threads, long *file_size);
 void server_thread_params(int con_sock, long *offset, long *segment_size);

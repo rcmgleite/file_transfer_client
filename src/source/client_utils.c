@@ -13,27 +13,13 @@
 
 #include "client_utils.h"
 
-char *build_file_path(char* file_name, char *dir_path){
+char *format_file_path(char* file_name){
 	size_t i, slen = strlen(file_name);
 	for (i = 0; i < slen; i++) {
 		if(file_name[i] == '\r')
 			file_name[i] = '\0';
 	}
-	slen = strlen(dir_path);
-	int prog_name_size = strlen(PROGRAM_NAME);
-	char *corrected_dir_path = (char*) malloc((slen + 1 - prog_name_size) * sizeof(char*));
-
-	i = 0;
-	while(i < slen - strlen(PROGRAM_NAME)){
-		corrected_dir_path[i] = dir_path[i];
-		i++;
-	}
-
-	char *file_path;
-	file_path = malloc(strlen(corrected_dir_path) + strlen(file_name));
-	strcpy(file_path, corrected_dir_path);
-	strcat(file_path, file_name);
-	return file_path;
+	return file_name;
 }
 
 int create_connection(char *host, char *port){

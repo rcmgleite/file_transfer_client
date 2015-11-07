@@ -35,7 +35,7 @@ proj_redes_client: $(OBJS) $(USER_OBJS)
 
 # Other Targets
 clean:
-	-$(RM) $(OBJS)$(C_DEPS)$(EXECUTABLES) proj_redes_client
+	-$(RM) $(EXECUTABLES)$(OBJS)$(C_DEPS) proj_redes_client
 	-@echo ' '
 
 .PHONY: all clean dependents

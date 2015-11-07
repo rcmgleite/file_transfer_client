@@ -12,66 +12,77 @@
 #include <arpa/inet.h>
 #include <fcntl.h>
 #include <pthread.h>
+#include <sys/resource.h>
+#include <sys/time.h>
 
 #include "ftp_client.h"
 #include "client_utils.h"
 
 pthread_mutex_t _lock = PTHREAD_MUTEX_INITIALIZER;
-
+/**
+ *	O programa é inicializado com 2 parâmetros: ip e porta (igual ao telnet)
+ **/
 int main(int argc, char *argv[]){
-	//TODO remover
-//	argc = 3;
-//	argv[1] = "127.0.0.1";
-//	argv[2] = "30000";
-
 	if(argc != 3){
-		fprintf(stderr, "Passa os argumentos direito, porra\n");
+		fprintf(stderr, "Passe os parametros 'ip' e 'porta' para que o cliente possa se conectar ao cliente.\n");
 		exit(1);
 	}
+
+	/*
+	 *	encontra o diretório de execução do programa
+	 **/
+	char exec_path[255];
+	readlink("/proc/self/exe", exec_path, 255);
+
+	struct rlimit rlp;
+	getrlimit(RLIMIT_NOFILE, &rlp);
+	rlp.rlim_cur = 4000;
+	setrlimit(RLIMIT_NOFILE, &rlp);
 
 	/**
 	 *	Variáveis necessárias
 	 **/
-	int curr_offset = 0;
+	long curr_offset = 0;
 
-	fprintf(stdout, "Vai criar a coneção!\n");
 	int con_sock = create_connection(argv[1], argv[2]);
-	fprintf(stdout, "Criou a conexão!\n");
 	char to_say[255];
 	char rec[1024];
 
+	fprintf(stderr, "Digite o nome do arquivo desejado: ");
 	scanf("%s", to_say);
 
 	if(recv(con_sock, rec, 1024, 0) != -1){
-		fprintf(stderr, "recebeu: %s\n", rec);
+		fprintf(stderr, "received: %s\n", rec);
 		send(con_sock, to_say, sizeof(to_say), 0);
 	}
 	else{
-		fprintf(stderr, "Cagou tudo aqui na hora de ler o primeiro trecho do protocolo...\n");
+		fprintf(stderr, "Error during client initialization\n Shutting down!...\n");
+		exit(1);
 	}
-	fprintf(stderr, "enviou o nome do arquivo: %s\n", to_say);
+	fprintf(stderr, "sent file_name: %s\n", to_say);
 
 	/**
 	 * 	Abro o arquivo que vou escever
 	 **/
-	char *path_to_write = build_file_path(to_say);
-	fprintf(stderr, "caminho do arquivo transferido: %s\n", path_to_write);
+	char *path_to_write = build_file_path(to_say, exec_path);
+	fprintf(stderr, "path to received file: %s\n", path_to_write);
 	int fd_to_write = open(path_to_write ,O_RDWR | O_CREAT, S_IRUSR|S_IWUSR);
 	if(fd_to_write == 1){
-		fprintf(stderr, "Deu merda pra abrir o arquivo do cliente\n");
+		fprintf(stderr, "Error while trying to create the new file\n Shutting down");
 		close(con_sock);
 		exit(1);
 	}
-	int num_threads, file_size;
+
+	close(fd_to_write);
+	int num_threads;
+	long file_size;
 
 	/**
 	 * 	Nos headers eu tenho o número de threads e o tamanho do arquivo que vai ser recebido
 	 **/
-//	char bb[1024];
-//	recv(con_sock, bb, 1024, 0);
-	fprintf(stderr, "Antes de fazer o parse do Header\n");
 	parse_header(con_sock, &num_threads, &file_size);
-	fprintf(stderr, "Depois de fazer o parse do Header\n");
+
+	fprintf(stderr, "num_threads: %d\n", num_threads);
 
 	/**
 	 *	Daqui pra frente lê o que o servidor manda e monta o arquivo final
@@ -80,8 +91,12 @@ int main(int argc, char *argv[]){
 	 **/
 	pthread_t *threads;
 	threads = (pthread_t *)malloc(num_threads * sizeof(*threads));
-//	struct thread_args *args;
-//	args = (struct thread_args *)malloc(num_threads * sizeof(*args));
+
+	wait_init(con_sock);
+
+	struct timeval tvalBefore, tvalAfter;  // removed comma
+
+	gettimeofday (&tvalBefore, NULL);
 
 	/**
 	 *	Inicialização das threads
@@ -90,16 +105,24 @@ int main(int argc, char *argv[]){
 	for(i = 0; i < num_threads; i++){
 		struct thread_args *args;
 		args = (struct thread_args *)malloc(sizeof(*args));
-		initialize_thread(&threads[i], args, i, con_sock, fd_to_write);
+		initialize_thread(&threads[i], args, i, con_sock, path_to_write);
 	}
 
 	//Apenas para o programa esperar as threads executarem
 	for (i = 0; i < num_threads; i++){
 		pthread_join(threads[i], NULL);
 	}
+	gettimeofday (&tvalAfter, NULL);
+
+	fprintf(stderr, "Aqruivo recebido!\n");
+
+	printf("Time Elapsed: %f sec\n",
+				                ((tvalAfter.tv_sec - tvalBefore.tv_sec)
+				               + (tvalAfter.tv_usec - tvalBefore.tv_usec)/(float)1000000)
+				              );
 
 	// Limpo todos os dados para a próxima requesição
-	clean_up(fd_to_write, threads, &num_threads, &curr_offset, &file_size);
+	clean_up(threads, &num_threads, &curr_offset, &file_size, path_to_write);
 
 	close(con_sock);
 
@@ -107,52 +130,69 @@ int main(int argc, char *argv[]){
 }
 
 void *thread_function(void *args){
-	pthread_mutex_lock(&_lock);
+	/**
+	 * 	Criação das conexões TCP entre threads.. função espelho da do server
+	 **/
+	/*TODO - IP NÃO HARD-CODED e 30000 não hard-coded*/
+	char new_port[100];
+	sprintf(new_port, "%d", SERVER_PORT + 1 + ((_thread_args*)args)->thread_number);
+	int trans_sock = create_connection("127.0.0.1", new_port);
 
 	/**
 	 *	Lê o offset e o segment_size que o servidor enviar para remontar o arquivo
 	 **/
-	int offset, segment_size;
-	server_thread_params(((_thread_args*)args)->server_sock, &offset, &segment_size);
+	long offset, segment_size;
+
+	server_thread_params(trans_sock, &offset, &segment_size);
 
 	char *file_segment;
-	file_segment = (char*) malloc(segment_size * sizeof(*file_segment));
-	int bytes_read;
-	fprintf(stdout, "\n\nSERÃO LIDOS: %d\n", segment_size);
-	fprintf(stdout, "\nTHREAD NUMBER: %d\n", ((_thread_args*)args)->thread_number);
+	long write_size = (segment_size <= MAX_WRITE_SIZE ? segment_size: MAX_WRITE_SIZE);
 
-	/**
-	 *	Leitura do socket que vai conter o contéudo do arquivo
-	 **/
-	bytes_read = read(((_thread_args*)args)->server_sock, file_segment, segment_size);
-	if(bytes_read < 0)
-		fprintf(stderr, "\nErro ao tentar ler arquivo pedido\n\n");
+	file_segment = (char*) malloc(write_size * sizeof(*file_segment));
+	long bytes_read;
+
+	int fd_write = open(((_thread_args*)args)->file_path ,O_RDWR);
+
 	/**
 	 *	lseek vai mudar o ponteiro do arquivo para escrever no local correto
 	 **/
-	lseek(((_thread_args*)args)->fd_to_write, offset, SEEK_SET);
-	write(((_thread_args*)args)->fd_to_write, file_segment, segment_size);
+	lseek(fd_write, offset, SEEK_SET);
+
+	while(segment_size != 0){
+		bytes_read = recv(trans_sock, file_segment, write_size, 0);
+		if(bytes_read < 0)
+			fprintf(stderr, "\nErro ao tentar ler arquivo pedido\n\n");
+
+		write(fd_write, file_segment, bytes_read);
+		segment_size -= bytes_read;
+		if(write_size >= segment_size){
+			write_size = segment_size;
+		}
+	}
 
 	/**
 	 *	Libero a memória do file_segment
 	 **/
 	free(file_segment);
 	free(args);
-	pthread_mutex_unlock(&_lock);
+	close(fd_write);
+	/*Fecha a conexão TCP*/
+	close(trans_sock);
+
 	return NULL;
 }
 
-void initialize_thread(pthread_t *thread, struct thread_args *args, int thread_number, int server_sock, int fd_to_write){
+void initialize_thread(pthread_t *thread, struct thread_args *args, int thread_number, int server_sock, char *file_path){
 	args->thread_number = thread_number;
-	args->fd_to_write = fd_to_write;
 	args->server_sock = server_sock;
+	args->file_path = file_path;
 	pthread_create(thread, NULL, thread_function, (void*)args);
 }
 
-void clean_up(int fd_to_write, pthread_t *threads, int *number_of_threads,
-		int *file_size, int *curr_offset){
-    close(fd_to_write);
+void clean_up(pthread_t *threads, int *number_of_threads,
+		long *file_size, long *curr_offset, char *file_path){
     free(threads);
+    free(file_path);
 	*number_of_threads = 0;
 	*file_size = 0;
 	*curr_offset = 0;
